@@ -13,10 +13,13 @@ def system_extension():
     return "." + platform.system().lower() + "." + platform.machine()
 
 def execute(command, args, stdin=None):
+    # print([command] + args)
     try:
         return (0, check_output([command] + args, stdin=stdin))
     except CalledProcessError as e:
         return (e.returncode, e.output)
+    except Exception as e:
+        return (255, e)
     except:
         return (255, "Generic error")
 

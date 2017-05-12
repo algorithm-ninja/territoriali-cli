@@ -41,6 +41,7 @@ class Task():
         if not all([x in self.managers for x in ("generator", "validator")]):
             raise Exception(self.conf["name"] + ": something is missing in managers")
         self.solutions = [directory + "solutions/" + x for x in listdir(directory + "solutions/") if plain_file(x)]
+        self.compile()
 
     def compile(self):
         print("Compiling sources for task \"" + self.conf["name"] + "\"", sep='')
@@ -51,37 +52,56 @@ class Task():
             print(filename)
             self.manager.compile(filename)
 
+    def _execute_generator(self, input_filename, seed=42, param=0):
+        (return_code, output) = self.manager.execute(self.managers["generator"], [str(seed), str(param)])
+        assert return_code == 0
+        input_file = open(input_filename, "w")
+        input_file.write(output.decode())
+        input_file.close()
+        return output
+
+    def _execute_validator(self, input_string, param=0):
+        if "validator" not in self.managers:
+            return
+        (pipe_read, pipe_write) = os.pipe()
+        os.write(pipe_write, input_string)
+        os.close(pipe_write)
+        return_code = self.manager.execute(self.managers["validator"], [str(param)], pipe_read)[0]
+        assert return_code == 0
+
+    def _execute_solution(self, solution_filename, input_string, output_filename):
+        (pipe_read, pipe_write) = os.pipe()
+        os.write(pipe_write, input_string)
+        os.close(pipe_write)
+        output = self.manager.execute(solution_filename, [], pipe_read)[1].decode()
+        output_file = open(output_filename, "w")
+        output_file.write(output)
+        output_file.close()
+
+    def _execute_checker(self, input_filename, output_filename):
+        (return_code, output) = self.manager.execute(self.managers["checker"], [input_filename, output_filename])
+        assert return_code == 0
+        return json.loads(output)
+
+    def _generate_tmp_filename(self, kind):
+        return gettempdir() + "/__tmp_" + kind + "_terry." + str(getpid())
+
+    def _test_solution(self, solution_filename):
+        print("Testing ", solution_filename, " - ", sep='', end='', flush=True)
+        tmp_input_name = self._generate_tmp_filename("input")
+        tmp_output_name = self._generate_tmp_filename("output")
+        input_text = self._execute_generator(tmp_input_name)
+        self._execute_validator(input_text)
+        self._execute_solution(solution_filename, input_text, tmp_output_name)
+        result = self._execute_checker(tmp_input_name, tmp_output_name)
+        if result["status"] != 0:
+            print("malformed")
+        else:
+            print(str(result["score"] * self.conf["max_score"]) + " points")
+        os.remove(tmp_input_name)
+        os.remove(tmp_output_name)
+
     def test_solutions(self):
-        self.compile()
         print("Running tests for task \"" + self.conf["name"] + "\"", sep='')
         for filename in self.solutions:
-            print("Testing ", filename, " - ", sep='', end='', flush=True)
-            tmp_input_name = gettempdir() + "/__tmp_input_terry." + str(getpid())
-            tmp_output_name = gettempdir() + "/__tmp_output_terry." + str(getpid())
-            (ret, out) = self.manager.execute(self.managers["generator"], ["42", "0"])
-            assert ret == 0
-            tmp_input = open(tmp_input_name, "w")
-            tmp_input.write(out.decode())
-            tmp_input.close()
-            if "validator" in self.managers:
-                (pread, pwrite) = os.pipe()
-                os.write(pwrite, out)
-                os.close(pwrite)
-                (ret, _) = self.manager.execute(self.managers["validator"], ["0"], pread)
-                assert ret == 0
-            (pread, pwrite) = os.pipe()
-            os.write(pwrite, open(tmp_input_name, "rb").read())
-            os.close(pwrite)
-            (ret, out) = self.manager.execute(filename, [], pread)
-            tmp_output = open(tmp_output_name, "w")
-            tmp_output.write(out.decode())
-            tmp_output.close()
-            (ret, out) = self.manager.execute(self.managers["checker"], [tmp_input_name, tmp_output_name])
-            assert ret == 0
-            result = json.loads(out)
-            if result["status"] != 0:
-                print("malformed")
-            else:
-                print(str(result["score"] * self.conf["max_score"]) + " points")
-            os.remove(tmp_input_name)
-            os.remove(tmp_output_name)
+            self._test_solution(filename)
