@@ -1,0 +1,6 @@
+%YAML 1.2
+---
+name: "sum"
+description: "Sum two numbers"
+max_score: 42
+
