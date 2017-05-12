@@ -19,31 +19,47 @@ class Task():
             directory += "/"
         self.manager = manager
         self.directory = directory
-        dirs = ["", "statement", "solutions", "managers"]
-        if not all([isdir(directory + "/" + x) for x in dirs]):
-            raise Exception(directory + " is missing")
-        self.conf = yaml.round_trip_load(open(directory + "/task.yaml", "r").read())
+        self._check_subdirs()
+        self._load_configuration()
+        self._load_managers()
+        self._load_solutions()
+        self._compile()
+
+    def _check_subdirs(self):
+        dirs = ("", "statement", "solutions", "managers")
+        if not all([isdir(self.directory + "/" + x) for x in dirs]):
+            raise Exception(self.directory + " is missing")
+
+    def _load_configuration(self):
+        self.conf = yaml.round_trip_load(open(self.directory + "/task.yaml", "r").read())
         if not all([x in self.conf for x in ("name", "description", "max_score")]):
-            raise Exception(directory + ": something is missing in task.yaml")
-        def plain_file(filename):
-            return splitext(splitext(filename)[0])[1] + splitext(filename)[1] != system_extension()
+            raise Exception(self.directory + ": something is missing in task.yaml")
+
+    def _load_solutions(self):
+        self.solutions = []
+        for filename in listdir(self.directory + "solutions/"):
+            if self._is_plain_filename(filename):
+                self.solutions.append(self.directory + "solutions/" + filename)
+
+    def _check_manager(self, basename, filename):
+        for manager in ("generator", "checker", "validator"):
+            if basename == manager:
+                self.managers[manager] = self.directory + "managers/" + filename
+
+    def _load_managers(self):
         self.managers = {}
-        for filename in listdir(directory + "managers/"):
+        for filename in listdir(self.directory + "managers/"):
             basename = splitext(filename)[0]
-            if not plain_file(filename):
+            if not self._is_plain_filename(filename):
                 continue
-            if basename == "generator":
-                self.managers["generator"] = directory + "managers/" + filename
-            elif basename == "checker":
-                self.managers["checker"] = directory + "managers/" + filename
-            elif basename == "validator":
-                self.managers["validator"] = directory + "managers/" + filename
+            self._check_manager(basename, filename)
         if not all([x in self.managers for x in ("generator", "validator")]):
             raise Exception(self.conf["name"] + ": something is missing in managers")
-        self.solutions = [directory + "solutions/" + x for x in listdir(directory + "solutions/") if plain_file(x)]
-        self.compile()
 
-    def compile(self):
+    def _is_plain_filename(self, filename):
+        return splitext(splitext(filename)[0])[1] + splitext(filename)[1] != system_extension()
+
+    def _compile(self):
         print("Compiling sources for task \"" + self.conf["name"] + "\"", sep='')
         for filename in self.managers:
             print(self.managers[filename])
@@ -86,7 +102,7 @@ class Task():
     def _generate_tmp_filename(self, kind):
         return gettempdir() + "/__tmp_" + kind + "_terry." + str(getpid())
 
-    def _test_solution(self, solution_filename):
+    def test_solution(self, solution_filename):
         print("Testing ", solution_filename, " - ", sep='', end='', flush=True)
         tmp_input_name = self._generate_tmp_filename("input")
         tmp_output_name = self._generate_tmp_filename("output")
@@ -104,4 +120,4 @@ class Task():
     def test_solutions(self):
         print("Running tests for task \"" + self.conf["name"] + "\"", sep='')
         for filename in self.solutions:
-            self._test_solution(filename)
+            self.test_solution(filename)
