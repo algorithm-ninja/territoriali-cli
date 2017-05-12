@@ -16,53 +16,68 @@ assert len(correct_output) == n
 
 case_status = [2 for i in range(n)]
 reports = {}
-
-def malformed_exit(why=""):
-    result = {}
-    result["status"] = 1
-    result["why"] = why
-    result["score"] = 0.0
-    print(json.dumps(result))
-    exit(0)
+alerts = []
+line_counter = -1
 
 for line in human_output:
+    line_counter += 1
     if line[:6] != "Case #":
-        malformed_exit("Wrong start of line")
+        alerts.append({"severity":"warning", "message":"Line #" + str(line_counter) + " does not start with Case #"})
+        continue
     line = line[6:]
     line = line.split(":")
     if len(line) < 2:
-        malformed_exit("Missing case number")
+        alerts.append({"severity":"warning", "message":"Cannot parse Case # at line #" + str(line_counter)})
+        continue
     try:
         case_number = int(line[0])
     except:
-        malformed_exit("Invalid case number")
+        alerts.append({"severity":"warning", "message":"Invalid Case # at line #" + str(line_counter)})
+        continue
     if case_number < 0 or case_number >= n:
-        malformed_exit("Invalid case number")
+        alerts.append({"severity":"warning", "message":"Case # out of range at line #" + str(line_counter)})
+        continue
     line = "".join(line[1:])
     if line[0] != " ":
-        malformed_exit("Missing space after column")
+        alerts.append({"severity":"warning", "message":"Missing space after colon at line #" + str(line_counter)})
+        continue
     line = line[1:]
     if case_status[case_number] != 2:
-        malformed_exit("Repeated case #" + str(case_number))
+        case_status[case_number] = 1
+        reports[case_number] = "multiple Case # definition"
+        continue
     line = line.split(" ")
     if len(line) != 1:
         case_status[case_number] = 1
-        reports[case_number] = "Not 1 item"
+        reports[case_number] = "more than one item given"
         continue
     try:
         a = int(line[0])
     except:
         case_status[case_number] = 1
-        reports[case_number] = "Not a number"
+        reports[case_number] = "not a number"
         continue
     if a == correct_output[case_number]:
         case_status[case_number] = 0
     else:
-        case_status[case_number] = 1
-        reports[case_number] = "Wrong Answer"
+        case_status[case_number] = -1
 
-result = {}
-result["status"] = 0
-result["score"] = sum([1 for x in case_status if x == 0]) / float(n)
-result["report"] = reports
-print(json.dumps(result))
+output = {"validation":{"cases":[], "alerts":alerts}, "feedback":{"cases":[], "alerts":[]}}
+output["score"] = sum([1 for x in case_status if x == 0]) / float(n)
+for i in range(n):
+    if case_status[i] == -1:
+        output["validation"]["cases"].append({"status":"parsed"})
+        output["feedback"]["cases"].append({"correct":False})
+    elif case_status[i] == 0:
+        output["validation"]["cases"].append({"status":"parsed"})
+        output["feedback"]["cases"].append({"correct":True})
+    elif case_status[i] == 1:
+        output["validation"]["cases"].append({"status":"invalid", "message":reports[i]})
+        output["feedback"]["cases"].append({"correct":False})
+    elif case_status[i] == 2:
+        output["validation"]["cases"].append({"status":"missing"})
+        output["feedback"]["cases"].append({"correct":False})
+    else:
+        assert False
+
+print(json.dumps(output))

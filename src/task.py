@@ -98,7 +98,7 @@ class Task():
     def _execute_checker(self, input_filename, output_filename):
         (return_code, output) = self.manager.execute(self.managers["checker"], [input_filename, output_filename])
         assert return_code == 0
-        return json.loads(output)
+        return json.loads(output.decode())
 
     def _generate_tmp_filename(self, kind):
         return gettempdir() + "/__tmp_" + kind + "_terry." + str(getpid())
@@ -111,10 +111,7 @@ class Task():
         self._execute_validator(input_text)
         self._execute_solution(solution_filename, input_text, tmp_output_name)
         result = self._execute_checker(tmp_input_name, tmp_output_name)
-        if result["status"] != 0:
-            log_output += "malformed"
-        else:
-            log_output += str(result["score"] * self.conf["max_score"]) + " points"
+        log_output += str(result["score"] * self.conf["max_score"]) + " points"
         os.remove(tmp_input_name)
         os.remove(tmp_output_name)
         logging.info(log_output)
