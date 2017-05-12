@@ -6,6 +6,7 @@
 # Copyright 2017 - Dario Ostuni <dario.ostuni@gmail.com>
 
 import platform
+import logging
 from subprocess import check_output, CalledProcessError
 from os.path import splitext
 
@@ -13,7 +14,7 @@ def system_extension():
     return "." + platform.system().lower() + "." + platform.machine()
 
 def execute(command, args, stdin=None):
-    # print([command] + args)
+    logging.debug([command] + args)
     try:
         return (0, check_output([command] + args, stdin=stdin))
     except CalledProcessError as e:

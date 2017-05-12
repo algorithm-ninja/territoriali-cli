@@ -10,6 +10,7 @@ from os import listdir, getpid
 from tempfile import gettempdir
 import os
 import json
+import logging
 from ruamel import yaml
 from .languages import system_extension
 
@@ -60,12 +61,12 @@ class Task():
         return splitext(splitext(filename)[0])[1] + splitext(filename)[1] != system_extension()
 
     def _compile(self):
-        print("Compiling sources for task \"" + self.conf["name"] + "\"", sep='')
+        logging.info("Compiling sources for task \"" + self.conf["name"] + "\"")
         for filename in self.managers:
-            print(self.managers[filename])
+            logging.info(self.managers[filename])
             self.manager.compile(self.managers[filename])
         for filename in self.solutions:
-            print(filename)
+            logging.info(filename)
             self.manager.compile(filename)
 
     def _execute_generator(self, input_filename, seed=42, param=0):
@@ -103,7 +104,7 @@ class Task():
         return gettempdir() + "/__tmp_" + kind + "_terry." + str(getpid())
 
     def test_solution(self, solution_filename):
-        print("Testing ", solution_filename, " - ", sep='', end='', flush=True)
+        log_output = "Testing " + solution_filename + " - "
         tmp_input_name = self._generate_tmp_filename("input")
         tmp_output_name = self._generate_tmp_filename("output")
         input_text = self._execute_generator(tmp_input_name)
@@ -111,13 +112,14 @@ class Task():
         self._execute_solution(solution_filename, input_text, tmp_output_name)
         result = self._execute_checker(tmp_input_name, tmp_output_name)
         if result["status"] != 0:
-            print("malformed")
+            log_output += "malformed"
         else:
-            print(str(result["score"] * self.conf["max_score"]) + " points")
+            log_output += str(result["score"] * self.conf["max_score"]) + " points"
         os.remove(tmp_input_name)
         os.remove(tmp_output_name)
+        logging.info(log_output)
 
     def test_solutions(self):
-        print("Running tests for task \"" + self.conf["name"] + "\"", sep='')
+        logging.info("Running tests for task \"" + self.conf["name"] + "\"")
         for filename in self.solutions:
             self.test_solution(filename)

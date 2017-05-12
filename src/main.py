@@ -6,10 +6,12 @@
 # Copyright 2017 - Dario Ostuni <dario.ostuni@gmail.com>
 
 from sys import argv
+import logging
 from .language_manager import LanguageManager
 from .task import Task
 
 def main():
+    logging.basicConfig(level=logging.INFO)
     language_manager = LanguageManager()
     assert len(argv) == 2
     task = Task(argv[1], language_manager)
