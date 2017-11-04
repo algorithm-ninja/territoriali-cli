@@ -14,6 +14,7 @@ import logging
 from ruamel import yaml
 from .languages import system_extension
 
+
 class Task():
     def __init__(self, directory, manager):
         if directory[-1] != "/":
@@ -32,9 +33,12 @@ class Task():
             raise Exception(self.directory + " is missing")
 
     def _load_configuration(self):
-        self.conf = yaml.round_trip_load(open(self.directory + "/task.yaml", "r").read())
-        if not all([x in self.conf for x in ("name", "description", "max_score")]):
-            raise Exception(self.directory + ": something is missing in task.yaml")
+        self.conf = yaml.round_trip_load(
+            open(self.directory + "/task.yaml", "r").read())
+        if not all(
+            [x in self.conf for x in ("name", "description", "max_score")]):
+            raise Exception(self.directory +
+                            ": something is missing in task.yaml")
 
     def _load_solutions(self):
         self.solutions = []
@@ -45,7 +49,8 @@ class Task():
     def _check_manager(self, basename, filename):
         for manager in ("generator", "checker", "validator"):
             if basename == manager:
-                self.managers[manager] = self.directory + "managers/" + filename
+                self.managers[
+                    manager] = self.directory + "managers/" + filename
 
     def _load_managers(self):
         self.managers = {}
@@ -55,22 +60,26 @@ class Task():
                 continue
             self._check_manager(basename, filename)
         if not all([x in self.managers for x in ("generator", "validator")]):
-            raise Exception(self.conf["name"] + ": something is missing in managers")
+            raise Exception(self.conf["name"] +
+                            ": something is missing in managers")
 
     def _is_plain_filename(self, filename):
-        return splitext(splitext(filename)[0])[1] + splitext(filename)[1] != system_extension()
+        return splitext(splitext(filename)[0])[1] + splitext(
+            filename)[1] != system_extension()
 
     def _compile(self):
-        logging.info("Compiling sources for task \"" + self.conf["name"] + "\"")
+        logging.info("Compiling sources for task \"" + self.conf["name"] +
+                     "\"")
         for filename in self.managers:
             logging.info(self.managers[filename])
-            self.manager.compile(self.managers[filename])
+            self.manager.compile(self.managers[filename], remove_ext=True)
         for filename in self.solutions:
             logging.info(filename)
             self.manager.compile(filename)
 
     def _execute_generator(self, input_filename, seed=42, param=0):
-        (return_code, output) = self.manager.execute(self.managers["generator"], [str(seed), str(param)])
+        (return_code, output) = self.manager.execute(
+            "managers/generator", [str(seed), str(param)])
         assert return_code == 0
         input_file = open(input_filename, "w")
         input_file.write(output.decode())
@@ -83,20 +92,24 @@ class Task():
         (pipe_read, pipe_write) = os.pipe()
         os.write(pipe_write, input_string)
         os.close(pipe_write)
-        return_code = self.manager.execute(self.managers["validator"], [str(param)], pipe_read)[0]
+        return_code = self.manager.execute("managers/validator", [str(param)],
+                                           pipe_read)[0]
         assert return_code == 0
 
-    def _execute_solution(self, solution_filename, input_string, output_filename):
+    def _execute_solution(self, solution_filename, input_string,
+                          output_filename):
         (pipe_read, pipe_write) = os.pipe()
         os.write(pipe_write, input_string)
         os.close(pipe_write)
-        output = self.manager.execute(solution_filename, [], pipe_read)[1].decode()
+        output = self.manager.execute(solution_filename, [],
+                                      pipe_read)[1].decode()
         output_file = open(output_filename, "w")
         output_file.write(output)
         output_file.close()
 
     def _execute_checker(self, input_filename, output_filename):
-        (return_code, output) = self.manager.execute(self.managers["checker"], [input_filename, output_filename])
+        (return_code, output) = self.manager.execute(
+            "managers/checker", [input_filename, output_filename])
         assert return_code == 0
         return json.loads(output.decode())
 

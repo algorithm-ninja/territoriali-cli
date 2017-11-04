@@ -22,24 +22,47 @@ line_counter = -1
 for line in human_output:
     line_counter += 1
     if line[:6] != "Case #":
-        alerts.append({"severity":"warning", "message":"Line #" + str(line_counter) + " does not start with Case #"})
+        alerts.append({
+            "severity":
+            "warning",
+            "message":
+            "Line #" + str(line_counter) + " does not start with Case #"
+        })
         continue
     line = line[6:]
     line = line.split(":")
     if len(line) < 2:
-        alerts.append({"severity":"warning", "message":"Cannot parse Case # at line #" + str(line_counter)})
+        alerts.append({
+            "severity":
+            "warning",
+            "message":
+            "Cannot parse Case # at line #" + str(line_counter)
+        })
         continue
     try:
         case_number = int(line[0])
     except:
-        alerts.append({"severity":"warning", "message":"Invalid Case # at line #" + str(line_counter)})
+        alerts.append({
+            "severity": "warning",
+            "message": "Invalid Case # at line #" + str(line_counter)
+        })
         continue
     if case_number < 0 or case_number >= n:
-        alerts.append({"severity":"warning", "message":"Case # out of range at line #" + str(line_counter)})
+        alerts.append({
+            "severity":
+            "warning",
+            "message":
+            "Case # out of range at line #" + str(line_counter)
+        })
         continue
     line = "".join(line[1:])
     if line[0] != " ":
-        alerts.append({"severity":"warning", "message":"Missing space after colon at line #" + str(line_counter)})
+        alerts.append({
+            "severity":
+            "warning",
+            "message":
+            "Missing space after colon at line #" + str(line_counter)
+        })
         continue
     line = line[1:]
     if case_status[case_number] != 2:
@@ -62,21 +85,33 @@ for line in human_output:
     else:
         case_status[case_number] = -1
 
-output = {"validation":{"cases":[], "alerts":alerts}, "feedback":{"cases":[], "alerts":[]}}
+output = {
+    "validation": {
+        "cases": [],
+        "alerts": alerts
+    },
+    "feedback": {
+        "cases": [],
+        "alerts": []
+    }
+}
 output["score"] = sum([1 for x in case_status if x == 0]) / float(n)
 for i in range(n):
     if case_status[i] == -1:
-        output["validation"]["cases"].append({"status":"parsed"})
-        output["feedback"]["cases"].append({"correct":False})
+        output["validation"]["cases"].append({"status": "parsed"})
+        output["feedback"]["cases"].append({"correct": False})
     elif case_status[i] == 0:
-        output["validation"]["cases"].append({"status":"parsed"})
-        output["feedback"]["cases"].append({"correct":True})
+        output["validation"]["cases"].append({"status": "parsed"})
+        output["feedback"]["cases"].append({"correct": True})
     elif case_status[i] == 1:
-        output["validation"]["cases"].append({"status":"invalid", "message":reports[i]})
-        output["feedback"]["cases"].append({"correct":False})
+        output["validation"]["cases"].append({
+            "status": "invalid",
+            "message": reports[i]
+        })
+        output["feedback"]["cases"].append({"correct": False})
     elif case_status[i] == 2:
-        output["validation"]["cases"].append({"status":"missing"})
-        output["feedback"]["cases"].append({"correct":False})
+        output["validation"]["cases"].append({"status": "missing"})
+        output["feedback"]["cases"].append({"correct": False})
     else:
         assert False
 

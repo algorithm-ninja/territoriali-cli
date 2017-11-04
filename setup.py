@@ -8,8 +8,10 @@
 import os
 from setuptools import setup, find_packages
 
+
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
 
 setup(
     name="terry",
@@ -25,14 +27,10 @@ setup(
     classifiers=[
         "Environment :: Console",
         "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
-        "Natural Language :: English",
-        "Operating System :: POSIX",
+        "Natural Language :: English", "Operating System :: POSIX",
         "Programming Language :: Python :: 3 :: Only",
         "Topic :: Scientific/Engineering"
     ],
     entry_points={
-        "console_scripts": [
-            "terry = src.main:main"
-        ]
-    }
-)
+        "console_scripts": ["terry = terry_cli.main:main"]
+    })

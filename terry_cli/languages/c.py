@@ -5,8 +5,11 @@
 #
 # Copyright 2017 - Dario Ostuni <dario.ostuni@gmail.com>
 
+import os
+
 from .language import Language
 from .utils import system_extension, execute
+
 
 class C(Language):
     @staticmethod
@@ -18,7 +21,14 @@ class C(Language):
         return [".c"]
 
     @staticmethod
-    def compile(source):
-        output = source + system_extension()
+    def compile(source, remove_ext):
+        if not remove_ext:
+            output = source + system_extension()
+        else:
+            output = os.path.splitext(source)[0] + system_extension()
         execute("gcc", ["-o", output, "-std=c11", "-O2", source])
+        if 'x86_64' in output:
+            i686_output = output.replace('x86_64', 'i686')
+            execute("gcc",
+                    ["-o", i686_output, "-std=c11", "-m32", "-O2", source])
         return output

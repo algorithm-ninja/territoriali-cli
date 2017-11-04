@@ -5,18 +5,11 @@
 #
 # Copyright 2017 - Dario Ostuni <dario.ostuni@gmail.com>
 
+from .c import C
+from .cxx import Cxx
 from .language import Language
-from .utils import execute
+from .rust import Rust
+from .python import Python
+from .utils import get_extension, system_extension
 
-class Python(Language):
-    @staticmethod
-    def name():
-        return "Python"
-
-    @staticmethod
-    def extensions():
-        return [".py"]
-
-    @staticmethod
-    def execute(executable, args, stdin):
-        return execute("python3", [executable] + args, stdin)
+LANGUAGES = [C, Cxx, Rust, Python]

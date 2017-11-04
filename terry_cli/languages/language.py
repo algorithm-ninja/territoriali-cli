@@ -7,6 +7,7 @@
 
 from .utils import execute, system_extension
 
+
 class Language():
     @staticmethod
     def name():
@@ -19,7 +20,7 @@ class Language():
         raise NotImplementedError("Implement this method")
 
     @staticmethod
-    def compile(source):
+    def compile(source, remove_ext):
         """Compile the source (if necessary) and return the name of the output"""
         return source
 
