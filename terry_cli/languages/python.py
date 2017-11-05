@@ -26,8 +26,8 @@ class Python(Language):
             output = source + system_extension()
         else:
             output = os.path.splitext(source)[0] + system_extension()
-        with open(source, "r") as source_file:
-            assert source_file.readline().startswith('#!')
+        with open(source, "rb") as source_file:
+            assert source_file.read(2) == b'#!'
         execute("cp", [source, output])
         execute("chmod", ["+x", output])
         if 'x86_64' in output:
