@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from sys import argv, exit, stderr
-from parser import Parser
+from terry_cli.parser import Parser
 
 
 if len(argv) != 3:
