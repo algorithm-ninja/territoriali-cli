@@ -4,4 +4,4 @@ t = int(input())
 
 for caso in range(t):
     (a, b) = [int(x) for x in input().split(" ")]
-    print("Case #", caso, ": ", a + b, sep='')
+    print("Case #", caso+1, ": ", a + b, sep='')

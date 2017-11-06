@@ -153,7 +153,7 @@ class TokenStream:
                 line = self.current_line_no
                 data_read += case
                 # if the string is not Case, read also the space and try again
-                if case != "Case":
+                if case.lower() != "case" and case.lower() != "caso":
                     data_read += self._probe_char()
                     continue
 
