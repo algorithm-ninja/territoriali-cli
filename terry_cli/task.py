@@ -80,7 +80,7 @@ class Task():
     def _execute_generator(self, input_filename, seed=42, param=0):
         (return_code, output) = self.manager.execute(
             "managers/generator", [str(seed), str(param)])
-        assert return_code == 0
+        assert return_code == 0, "The generator exited with status code %d" % (return_code)
         input_file = open(input_filename, "w")
         input_file.write(output.decode())
         input_file.close()
