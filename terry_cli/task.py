@@ -101,8 +101,11 @@ class Task():
         (pipe_read, pipe_write) = os.pipe()
         os.write(pipe_write, input_string)
         os.close(pipe_write)
-        output = self.manager.execute(solution_filename, [],
-                                      pipe_read)[1].decode()
+        ret, out = self.manager.execute(solution_filename, [],
+                                        pipe_read)
+        if isinstance(out, Exception):
+            raise out
+        output = out.decode()
         output_file = open(output_filename, "w")
         output_file.write(output)
         output_file.close()
