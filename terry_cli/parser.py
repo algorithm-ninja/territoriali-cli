@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
+
 from collections import deque
 import json
+import unittest
+import io
+from functools import reduce
+from random import shuffle
 
 
 class TokenStream:
-    def __init__(self, file, strict_spaces=False, int_max_len=9, float_max_len=9, str_max_len=1024, spaces=" \t\n"):
+    def __init__(self, file, strict_spaces=False, int_max_len=32, float_max_len=32, str_max_len=4096, spaces=" \t\n"):
         """
         :param file: file object of the output
         :param strict_spaces: whether to consider spaces as tokens, manual skipping of them is required
@@ -157,11 +162,8 @@ class TokenStream:
                     data_read += self._probe_char()
                     continue
 
-                # skip all the spaces between "Case" and "#"
-                if self.strict_spaces:
-                    data_read += self.space()
-                else:
-                    data_read += self._skip_spaces()
+                # skip one space between "Case" and "#"
+                data_read += self.space()
 
                 # check if the next char is #
                 if self._probe_char() != "#": continue
@@ -380,8 +382,164 @@ class Parser:
                 output["feedback"]["cases"][num-1]["message"] = message
             if score == 1.0:
                 output["feedback"]["cases"][num-1]["correct"] = True
+            if score < 0.0 or score > 1.0:
+                score = 0.0
+                output["feedback"]["cases"][num-1]["correct"] = False
+                output["feedback"]["cases"][num-1]["message"] = "buggy checker detected!"
 
             total_score += score
 
         output["score"] = total_score/self.num_inputs
-        print(json.dumps(output, indent=4))
+        return output
+
+
+class TestParser(unittest.TestCase):
+    def test_none_args(self):
+        with self.assertRaises(TypeError):
+            p = Parser(None, None, None)
+            p.run()
+
+    def test_none_eval(self):
+        with self.assertRaises(TypeError):
+            p = Parser(None, 1, io.StringIO("Case #1: 42"))
+            p.run()
+
+    def test_mismatch_cases(self):
+        for i in range(2):
+            with self.subTest(case_number=i):
+                p = Parser(lambda x, y: int(x == y.int()), 1, io.StringIO("Case #42: 42\nCase #1: " + str(i)))
+                self.assertEqual(p.run()["score"], float(i))
+
+    def test_correct_integer(self):
+        for k in (1, 2, 37, 131, 1009):
+            with self.subTest(number_of_cases=k):
+                lines = ["Case #%d: %d" % (i + 1, i) for i in range(k)]
+                shuffle(lines)
+                text = reduce(lambda x, y: x + "\n" + y, lines)
+                def evaluate(case_number, stream):
+                    n = stream.int()
+                    stream.end()
+                    return float(case_number == n + 1)
+                p = Parser(evaluate, k, io.StringIO(text))
+                self.assertEqual(p.run()["score"], 1.0)
+
+    def test_correct_float(self):
+        for k in (1, 2, 37, 131, 1009):
+            with self.subTest(number_of_cases=k):
+                lines = ["Case #%d: %f" % (i + 1, float(i)) for i in range(k)]
+                shuffle(lines)
+                text = reduce(lambda x, y: x + "\n" + y, lines)
+                def evaluate(case_number, stream):
+                    n = stream.float()
+                    stream.end()
+                    return float(abs(float(case_number) - n - 1.0) < 1e-6)
+                p = Parser(evaluate, k, io.StringIO(text))
+                self.assertEqual(p.run()["score"], 1.0)
+
+    def test_correct_string(self):
+        for k in (1, 2, 37, 131, 1009):
+            with self.subTest(number_of_cases=k):
+                def n2n(x):
+                    if x % 2 == 0:
+                        return "yay"
+                    else:
+                        return "nay"
+                lines = ["Case #%d: %s" % (i + 1, n2n(i)) for i in range(k)]
+                shuffle(lines)
+                text = reduce(lambda x, y: x + "\n" + y, lines)
+                def evaluate(case_number, stream):
+                    n = stream.str()
+                    stream.end()
+                    return float(n2n(case_number + 1) == n)
+                p = Parser(evaluate, k, io.StringIO(text))
+                self.assertEqual(p.run()["score"], 1.0)
+
+    def test_too_long_string(self):
+        p = Parser(lambda x, y: float(y.str() == "wibblemonster"), 1, io.StringIO("Case #1: wibblemonster"), str_max_len=5)
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_string_validator(self):
+        def tester(case_number, stream):
+            s = stream.str(lambda x: x == "foo")
+            return float(s == "bar")  # pragma: no cover
+        p = Parser(tester, 1, io.StringIO("Case #1: bar"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_char_validator(self):
+        def tester(case_number, stream):
+            c = stream.char(lambda x: x == "a")
+            return float(s == "b")  # pragma: no cover
+        p = Parser(tester, 1, io.StringIO("Case #1: b"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_int_validator(self):
+        def tester(case_number, stream):
+            c = stream.char(lambda x: x == 42)
+            return float(s == 21)  # pragma: no cover
+        p = Parser(tester, 1, io.StringIO("Case #1: 21"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_space(self):
+        def tester(case_number, stream):
+            c = stream.space()
+            return float(c == " ")
+        p = Parser(tester, 1, io.StringIO("Case #1: "), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_space_wrong(self):
+        def tester(case_number, stream):
+            c = stream.space()
+            return float(c == " ")  # pragma: no cover
+        p = Parser(tester, 1, io.StringIO("Case #1:"), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_space_validator(self):
+        def tester(case_number, stream):
+            c = stream.space(lambda x: x == "\n")
+            return float(c == " ")  # pragma: no cover
+        p = Parser(tester, 1, io.StringIO("Case #1: "), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_multiple_spaces_case(self):
+        p = Parser(lambda x, y: 1.0, 1, io.StringIO("Case   #1: "))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_same_cases(self):
+        p = Parser(lambda x, y: float(y.int() == 0), 1, io.StringIO("Case #1: 1\nCase #1: 0"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_same_space_separated(self):
+        p = Parser(lambda x, y: float(y.int() == 0), 1, io.StringIO("Case #1: 0 Case #1: 1"))
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_same_invalid_separated(self):
+        p = Parser(lambda x, y: float(y.int() == 0), 1, io.StringIO("Case #1: 0Case #1: 0"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_wrong_case_naming(self):
+        p = Parser(lambda x, y: float(y.int() == 0), 1, io.StringIO("Caze #1: 0"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_too_few_arguments(self):
+        def tester(case_number, stream):
+            s = stream.str()
+            stream.end()
+            return float(s == "foobar")
+        p = Parser(tester, 4, io.StringIO("Case #1: \nCase #2: foobar Case #3: foobar\tCase #4: foobar"))
+        self.assertEqual(p.run()["score"], 0.5)
+
+    def test_buggy_eval(self):
+        p = Parser(lambda x, y: 45.0, 1, io.StringIO("Case #1: "))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_message(self):
+        p = Parser(lambda x, y: (0.0, "foobar"), 1, io.StringIO("Case #1: "))
+        self.assertEqual(p.run()["feedback"]["cases"][0]["message"], "foobar")
+
+    def test_case_too_long(self):
+        p = Parser(lambda x, y: 1.0, 1, io.StringIO("Case #" + str(2**2**2**2**2) + ": "))
+        self.assertEqual(p.run()["score"], 0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
