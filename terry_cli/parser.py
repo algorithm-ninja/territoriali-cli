@@ -8,6 +8,9 @@ from functools import reduce
 from random import shuffle
 
 
+BUFFER_SIZE = 1024
+
+
 class TokenStream:
     def __init__(self, file, strict_spaces=False, int_max_len=32, float_max_len=32, str_max_len=4096, spaces=" \t\n"):
         """
@@ -89,24 +92,6 @@ class TokenStream:
             # check the buffer starts with the prefix
             if self._is_prefix() >= 0:
                 raise ValueError("the testcase has not ended")
-            # start checking the number
-            index = len("Case #")
-            # the first digit is already loaded
-            if self.char_buffer[index] not in "123456789":
-                raise ValueError("malformed testcase number")
-            while True:
-                # load the next digits
-                while len(self.char_buffer) < index+1:
-                    self._read_char()
-                if index > len("Case #") + self.int_max_len:
-                    raise ValueError("testcase number too long")
-                # if the number is ended with ":" => valid testcase
-                if self.char_buffer[index] == ":":
-                    return
-                # if the number is ended with something bad
-                if self.char_buffer[index] not in "0123456789":
-                    raise ValueError("malformed testcase number")
-                index += 1
         # if the EOF is found but not at the beginning there's a problem
         except EOFError:
             raise ValueError("expecting new testcase, not EOF")
@@ -237,8 +222,6 @@ class TokenStream:
 
     def _next_char(self):
         """Read and consume a char"""
-        if len(self.char_buffer) == 0:
-            self._read_char()
         if self._probe_char() == "\n":
             self.current_line_no += 1
         return self.char_buffer.popleft()
@@ -251,7 +234,7 @@ class TokenStream:
 
     def _read_char(self):
         """Read but not consume a character"""
-        char = self.file.read(1024)
+        char = self.file.read(BUFFER_SIZE)
         if char == "":
             raise EOFError("End of file")
         self.char_buffer.extend(char)
@@ -281,13 +264,14 @@ class TokenStream:
         if not self._is_eof(index+1) and self._probe_char(index) not in self.spaces:
             raise ValueError("invalid character `%s' in number" % self._probe_char(index))
 
-        res = type(buffer)
-        if not validate(res):
-            raise ValueError("validation failed")
         # consume the number if requested
         if advance_buffer:
             for _ in range(index):
                 self._next_char()
+
+        res = type(buffer)
+        if not validate(res):
+            raise ValueError("validation failed")
         return res
 
     def _is_prefix(self):
@@ -298,11 +282,11 @@ class TokenStream:
         return -1
 
     def _is_eof(self, at_least=1):
-        """returns True is there are no more bytes to consume"""
-        if self.eof:
-            return True
+        """returns True if there are no more bytes to consume"""
         if len(self.char_buffer) >= at_least:
             return False
+        if self.eof:
+            return True
         try:
             self._read_char()
         except EOFError:
@@ -362,9 +346,6 @@ class Parser:
                 if len(ex.args) >= 3 and len(ex.args[1]) > 0:
                     add_warning("Skipped data from line %d: %s" % (ex.args[2], ex.args[1]))
                 break
-            except ValueError as ex:
-                print("skipping testcase", ex)
-                continue
 
             try:
                 out = self.parse_testcase(num, self.stream)
@@ -468,14 +449,14 @@ class TestParser(unittest.TestCase):
     def test_char_validator(self):
         def tester(case_number, stream):
             c = stream.char(lambda x: x == "a")
-            return float(s == "b")  # pragma: no cover
+            return float(c == "b")  # pragma: no cover
         p = Parser(tester, 1, io.StringIO("Case #1: b"))
         self.assertEqual(p.run()["score"], 0.0)
 
     def test_int_validator(self):
         def tester(case_number, stream):
-            c = stream.char(lambda x: x == 42)
-            return float(s == 21)  # pragma: no cover
+            n = stream.int(lambda x: x == 42)
+            return float(n == 21)  # pragma: no cover
         p = Parser(tester, 1, io.StringIO("Case #1: 21"))
         self.assertEqual(p.run()["score"], 0.0)
 
@@ -539,6 +520,99 @@ class TestParser(unittest.TestCase):
     def test_case_too_long(self):
         p = Parser(lambda x, y: 1.0, 1, io.StringIO("Case #" + str(2**2**2**2**2) + ": "))
         self.assertEqual(p.run()["score"], 0.0)
+
+    def test_case_malformed(self):
+        def tester(case_number, stream):
+            n = stream.int()
+            stream.end()
+            return float(n == 42)
+        p = Parser(tester, 4, io.StringIO("Case #1: 42\nCase #foobar: 42\nCase #3: 42\nCase #2: 21"))
+        self.assertEqual(p.run()["score"], 0.5)
+
+    def test_case_malformed_without_end(self):
+        def tester(case_number, stream):
+            n = stream.int()
+            return float(n == 42)
+        p = Parser(tester, 4, io.StringIO("Case #1: 42\nCase #foobar: 42\nCase #3: 42\nCase #2: 21"))
+        self.assertEqual(p.run()["score"], 0.5)
+
+    def test_case_malformed_alone(self):
+        def tester(case_number, stream):
+            n = stream.int()  # pragma: no cover
+            return float(n == 42)  # pragma: no cover
+        p = Parser(tester, 1, io.StringIO("Case #foobar: 42"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_early_eof(self):
+        def tester(case_number, stream):
+            n = stream.int()
+            stream.end()
+            return float(n == 42)  # pragma: no cover
+        p = Parser(tester, 2, io.StringIO("Case #2: 42\nCas"))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_strict_nospaces(self):
+        def tester(case_number, stream):
+            (a, b) = (stream.int(), stream.int())
+            stream.end()  # pragma: no cover
+            return float(a == 42 and b == 42)  # pragma: no cover
+        p = Parser(tester, 2, io.StringIO("Case #1:42 42"), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_strict_has(self):
+        def tester(case_number, stream):
+            self.assertFalse(stream.has_int())
+            self.assertFalse(stream.has_float())
+            self.assertTrue(stream.has_space())
+            _ = stream.space()
+            s = stream.str()
+            return float(s == "foobar")
+        p = Parser(tester, 1, io.StringIO("Case #1: foobar"), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_strict_has_int(self):
+        def tester(case_number, stream):
+            self.assertTrue(stream.has_int())
+            n = stream.int()
+            return float(n == 42)
+        p = Parser(tester, 1, io.StringIO("Case #1:42"), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_empty(self):
+        p = Parser(lambda x, y: 1.0, 1, io.StringIO(""))
+        self.assertEqual(p.run()["score"], 0.0)
+
+    def test_strict_has_float(self):
+        def tester(case_number, stream):
+            self.assertTrue(stream.has_float())
+            n = stream.float()
+            return float(n == 42.0)
+        p = Parser(tester, 1, io.StringIO("Case #1:42.0"), strict_spaces=True)
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_has_int(self):
+        def tester(case_number, stream):
+            self.assertTrue(stream.has_int())
+            n = stream.int()
+            return float(n == 42)
+        p = Parser(tester, 1, io.StringIO("Case #1: 42"))
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_has_float(self):
+        def tester(case_number, stream):
+            self.assertTrue(stream.has_float())
+            n = stream.float()
+            return float(n == 42.0)
+        p = Parser(tester, 1, io.StringIO("Case #1: 42.0"))
+        self.assertEqual(p.run()["score"], 1.0)
+
+    def test_has_space(self):
+        def tester(case_number, stream):
+            with self.assertRaises(RuntimeError):
+                stream.has_space()
+            return 1.0
+        p = Parser(tester, 1, io.StringIO("Case #1: "))
+        self.assertEqual(p.run()["score"], 1.0)
 
 
 if __name__ == "__main__":
