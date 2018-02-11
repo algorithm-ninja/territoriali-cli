@@ -5,10 +5,13 @@ import json
 import unittest
 import io
 from functools import reduce
-from random import shuffle
+from random import shuffle, choices, randrange
+import string
 
 
 BUFFER_SIZE = 1024
+FUZZER_LENGTH = 8192
+FUZZER_RUNS = 1024
 
 
 class TokenStream:
@@ -613,6 +616,40 @@ class TestParser(unittest.TestCase):
             return 1.0
         p = Parser(tester, 1, io.StringIO("Case #1: "))
         self.assertEqual(p.run()["score"], 1.0)
+
+
+class FuzzerParser(unittest.TestCase):
+    def test_int(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = "".join(choices(string.digits, k=randrange(FUZZER_LENGTH)))
+            with self.subTest(run=i, fuzz=fuzz):
+                p = Parser(lambda x, y: float(y.int() == -1), 1, io.StringIO("Case #1: " + fuzz))
+                self.assertEqual(p.run()["score"], 0.0)
+
+    def test_float(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = "".join(choices(string.digits, k=randrange(FUZZER_LENGTH // 2)))
+            fuzz += "."
+            fuzz += "".join(choices(string.digits, k=randrange(FUZZER_LENGTH // 2)))
+            with self.subTest(run=i, fuzz=fuzz):
+                p = Parser(lambda x, y: float(y.float() == -1.0), 1, io.StringIO("Case #1: " + fuzz))
+                self.assertEqual(p.run()["score"], 0.0)
+
+    def test_string(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = "".join(choices(string.digits + string.ascii_uppercase + string.ascii_lowercase, k=randrange(FUZZER_LENGTH + 1)))
+            with self.subTest(run=i, fuzz=fuzz):
+                p = Parser(lambda x, y: float(y.str() == ""), 1, io.StringIO("Case #1: " + fuzz))
+                self.assertEqual(p.run()["score"], 0.0)
+
+    def test_raw(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = "".join(choices(string.digits + string.ascii_uppercase + string.ascii_lowercase, k=randrange(FUZZER_LENGTH + 1)))
+            if fuzz[0:4].lower() in ("caso", "case"):
+                fuzz = "a" + fuzz
+            with self.subTest(run=i, fuzz=fuzz):
+                p = Parser(lambda x, y: float(y.str() == ""), 1, io.StringIO(fuzz))
+                self.assertEqual(p.run()["score"], 0.0)
 
 
 if __name__ == "__main__":
