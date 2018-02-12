@@ -12,10 +12,13 @@ import string
 BUFFER_SIZE = 1024
 FUZZER_LENGTH = 8192
 FUZZER_RUNS = 1024
+DEFAULT_INT_MAX_LEN = 32
+DEFAULT_FLOAT_MAX_LEN = 32
+DEFAULT_STRING_MAX_LEN = 4096
 
 
 class TokenStream:
-    def __init__(self, file, strict_spaces=False, int_max_len=32, float_max_len=32, str_max_len=4096, spaces=" \t\n"):
+    def __init__(self, file, strict_spaces=False, int_max_len=DEFAULT_INT_MAX_LEN, float_max_len=DEFAULT_FLOAT_MAX_LEN, str_max_len=DEFAULT_STRING_MAX_LEN, spaces=" \t\n"):
         """
         :param file: file object of the output
         :param strict_spaces: whether to consider spaces as tokens, manual skipping of them is required
@@ -26,6 +29,11 @@ class TokenStream:
         """
         self.file = file
         self.strict_spaces = strict_spaces
+
+        if str_max_len < int_max_len:
+            raise ValueError("str_max_len lower than int_max_len")
+        if str_max_len < float_max_len:
+            raise ValueError("str_max_len lower than float_max_len")
 
         self.int_max_len = int_max_len
         self.float_max_len = float_max_len
@@ -439,7 +447,7 @@ class TestParser(unittest.TestCase):
                 self.assertEqual(p.run()["score"], 1.0)
 
     def test_too_long_string(self):
-        p = Parser(lambda x, y: float(y.str() == "wibblemonster"), 1, io.StringIO("Case #1: wibblemonster"), str_max_len=5)
+        p = Parser(lambda x, y: float(y.str() == "wibblemonster"), 1, io.StringIO("Case #1: wibblemonster"), str_max_len=5, int_max_len=5, float_max_len=5)
         self.assertEqual(p.run()["score"], 0.0)
 
     def test_string_validator(self):
@@ -617,6 +625,11 @@ class TestParser(unittest.TestCase):
         p = Parser(tester, 1, io.StringIO("Case #1: "))
         self.assertEqual(p.run()["score"], 1.0)
 
+    def test_int_lower(self):
+        with self.assertRaises(ValueError):
+            p = Parser(lambda x, y: float(y.int() == 42), 1, io.StringIO("Case #1: 42"), str_max_len=1)
+            self.assertEqual(p.run()["score"], 1.0)
+
 
 class FuzzerParser(unittest.TestCase):
     def test_int(self):
@@ -624,6 +637,14 @@ class FuzzerParser(unittest.TestCase):
             fuzz = "".join(choices(string.digits, k=randrange(FUZZER_LENGTH)))
             with self.subTest(run=i, fuzz=fuzz):
                 p = Parser(lambda x, y: float(y.int() == -1), 1, io.StringIO("Case #1: " + fuzz))
+                self.assertEqual(p.run()["score"], 0.0)
+
+    def test_int_parameters(self):
+        for i in range(FUZZER_RUNS):
+            k = min(randrange(FUZZER_LENGTH), DEFAULT_STRING_MAX_LEN)
+            fuzz = "".join(choices(string.digits, k=randrange(FUZZER_LENGTH)))
+            with self.subTest(run=i, fuzz=fuzz, int_param=k):
+                p = Parser(lambda x, y: float(y.int() == -1), 1, io.StringIO("Case #1: " + fuzz), int_max_len=k)
                 self.assertEqual(p.run()["score"], 0.0)
 
     def test_float(self):
@@ -635,16 +656,45 @@ class FuzzerParser(unittest.TestCase):
                 p = Parser(lambda x, y: float(y.float() == -1.0), 1, io.StringIO("Case #1: " + fuzz))
                 self.assertEqual(p.run()["score"], 0.0)
 
+    def test_float_parameters(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = "".join(choices(string.digits, k=randrange(FUZZER_LENGTH // 2)))
+            fuzz += "."
+            fuzz += "".join(choices(string.digits, k=randrange(FUZZER_LENGTH // 2)))
+            k = min(randrange(FUZZER_LENGTH), DEFAULT_STRING_MAX_LEN)
+            with self.subTest(run=i, fuzz=fuzz, float_param=k):
+                p = Parser(lambda x, y: float(y.float() == -1.0), 1, io.StringIO("Case #1: " + fuzz), float_max_len=k)
+                self.assertEqual(p.run()["score"], 0.0)
+
     def test_string(self):
         for i in range(FUZZER_RUNS):
             fuzz = "".join(choices(string.digits + string.ascii_uppercase + string.ascii_lowercase, k=randrange(FUZZER_LENGTH + 1)))
             with self.subTest(run=i, fuzz=fuzz):
-                p = Parser(lambda x, y: float(y.str() == ""), 1, io.StringIO("Case #1: " + fuzz))
+                p = Parser(lambda x, y: float(y.str() == ""), 1, io.StringIO("Case #1:" + fuzz), strict_spaces=True)
+                self.assertEqual(p.run()["score"], 0.0)
+
+    def test_string_parameters(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = "".join(choices(string.digits + string.ascii_uppercase + string.ascii_lowercase, k=randrange(FUZZER_LENGTH + 1)))
+            k = max(randrange(FUZZER_LENGTH), DEFAULT_INT_MAX_LEN, DEFAULT_FLOAT_MAX_LEN)
+            with self.subTest(run=i, fuzz=fuzz, string_param=k):
+                p = Parser(lambda x, y: float(y.str() == ""), 1, io.StringIO("Case #1:" + fuzz), str_max_len=k, strict_spaces=True)
                 self.assertEqual(p.run()["score"], 0.0)
 
     def test_raw(self):
         for i in range(FUZZER_RUNS):
-            fuzz = "".join(choices(string.digits + string.ascii_uppercase + string.ascii_lowercase, k=randrange(FUZZER_LENGTH + 1)))
+            fuzz = "".join(choices(string.printable, k=randrange(FUZZER_LENGTH)))
+            if fuzz[0:4].lower() in ("caso", "case"):
+                fuzz = "a" + fuzz
+            with self.subTest(run=i, fuzz=fuzz):
+                p = Parser(lambda x, y: float(y.str() == ""), 1, io.StringIO(fuzz))
+                self.assertEqual(p.run()["score"], 0.0)
+
+    def test_raw_unicode(self):
+        for i in range(FUZZER_RUNS):
+            fuzz = ""
+            for _ in range(randrange(FUZZER_LENGTH)):
+                fuzz += chr(randrange(0x110000))
             if fuzz[0:4].lower() in ("caso", "case"):
                 fuzz = "a" + fuzz
             with self.subTest(run=i, fuzz=fuzz):
