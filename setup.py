@@ -14,7 +14,7 @@ def read(fname):
 
 
 setup(
-    name="terry",
+    name="terry-cli",
     version="0.0.1",
     author="Dario Ostuni",
     author_email="dario.ostuni@gmail.com",

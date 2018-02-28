@@ -288,7 +288,7 @@ class TokenStream:
     def _is_prefix(self):
         """tries to match the "Case #" prefix in the buffer, returns the index of mismatch, -1 if match"""
         for i in range(len("Case #")):
-            if self.char_buffer[i] != "Case #"[i]:
+            if self.char_buffer[i].lower() != "case #"[i]:
                 return i
         return -1
 
